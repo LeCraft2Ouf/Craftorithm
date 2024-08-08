@@ -31,7 +31,7 @@ public final class Craftorithm extends BukkitPlugin implements Listener {
 
     @Override
     public void enable() {
-        if (CrypticLib.minecraftVersion() < 11904) {
+        if (CrypticLib.minecraftVersion() < 11802) {
             MsgSender.info("&c[Craftorithm] Unsupported Version");
             throw new UnsupportedVersionException();
         }
