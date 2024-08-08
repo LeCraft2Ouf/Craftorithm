@@ -4,6 +4,9 @@
 *.iml
 *.ipr
 *.iws
+.vs
+.gradle
+build/
 
 # IntelliJ
 out/
