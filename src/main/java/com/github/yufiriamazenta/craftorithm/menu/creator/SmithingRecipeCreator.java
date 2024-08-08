@@ -21,10 +21,11 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 public class SmithingRecipeCreator extends UnlockableRecipeCreator {
 
-    private boolean copyNbt = true;
+    private boolean copyNbt = false;
 
     public SmithingRecipeCreator(@NotNull Player player, @NotNull String recipeName) {
         super(player, RecipeType.SMITHING, recipeName);
@@ -32,36 +33,24 @@ public class SmithingRecipeCreator extends UnlockableRecipeCreator {
             new MenuDisplay(
                 title(),
                 new MenuLayout(
+                    () -> Arrays.asList(
+                        "####F####",
+                        "#***#%%%#",
+                        "#   A% %#",
+                        "#***#%%%#",
+                        "####B####"
+                    ),
                     () -> {
-                        if (CrypticLib.minecraftVersion() < 12000) {
-                            return Arrays.asList(
-                                "####F####",
-                                "#***#%%%#",
-                                "# * A% %#",
-                                "#***#%%%#",
-                                "####B####"
-                            );
-                        } else {
-                            return Arrays.asList(
-                                "####F####",
-                                "#***#%%%#",
-                                "#   A% %#",
-                                "#***#%%%#",
-                                "####B####"
-                            );
-                        }
-                    },
-                    () -> {
-                        Map<Character, Icon> layoutMap = new HashMap<>();
-                        layoutMap.put('#', getFrameIcon());
-                        layoutMap.put('*', new Icon(
+                        Map<Character, Supplier<Icon>> layoutMap = new HashMap<>();
+                        layoutMap.put('#', this::getFrameIcon);
+                        layoutMap.put('*', () -> new Icon(
                             Material.CYAN_STAINED_GLASS_PANE,
                             Languages.MENU_RECIPE_CREATOR_ICON_SMITHING_FRAME.value(player)
                         ));
-                        layoutMap.put('%', getResultFrameIcon());
-                        layoutMap.put('F', getUnlockIcon());
-                        layoutMap.put('B', getCopyNbtIcon());
-                        layoutMap.put('A', new Icon(
+                        layoutMap.put('%', this::getResultFrameIcon);
+                        layoutMap.put('F', this::getUnlockIcon);
+                        layoutMap.put('B', this::getCopyNbtIcon);
+                        layoutMap.put('A', () -> new Icon(
                             Material.SMITHING_TABLE,
                             Languages.MENU_RECIPE_CREATOR_ICON_CONFIRM.value(player)
                             ).setClickAction(
@@ -74,19 +63,14 @@ public class SmithingRecipeCreator extends UnlockableRecipeCreator {
                                 }
                                 String resultName = ItemUtils.matchItemNameOrCreate(result, false);
                                 ItemStack base, addition, template;
-                                String baseName, additionName, templateName = null;
-                                if (CrypticLib.minecraftVersion() < 12000) {
-                                    base = creator.storedItems().get(19);
-                                    addition = creator.storedItems().get(21);
-                                } else {
-                                    template = creator.storedItems().get(19);
-                                    base = creator.storedItems().get(20);
-                                    addition = creator.storedItems().get(21);
-                                    templateName = ItemUtils.matchItemNameOrCreate(template, true);
-                                    if (ItemUtil.isAir(template)) {
-                                        LangUtil.sendLang(event.getWhoClicked(), Languages.COMMAND_CREATE_NULL_SOURCE);
-                                        return;
-                                    }
+                                String baseName, additionName, templateName;
+                                template = creator.storedItems().get(19);
+                                base = creator.storedItems().get(20);
+                                addition = creator.storedItems().get(21);
+                                templateName = ItemUtils.matchItemNameOrCreate(template, true);
+                                if (ItemUtil.isAir(template)) {
+                                    LangUtil.sendLang(event.getWhoClicked(), Languages.COMMAND_CREATE_NULL_SOURCE);
+                                    return;
                                 }
                                 if (ItemUtil.isAir(base) || ItemUtil.isAir(addition)) {
                                     LangUtil.sendLang(event.getWhoClicked(), Languages.COMMAND_CREATE_NULL_SOURCE);
@@ -99,10 +83,8 @@ public class SmithingRecipeCreator extends UnlockableRecipeCreator {
                                 recipeConfig.set("source.base", baseName);
                                 recipeConfig.set("source.addition", additionName);
                                 recipeConfig.set("type", "smithing");
-                                if (CrypticLib.minecraftVersion() >= 12000) {
-                                    recipeConfig.set("source.type", "transform");
-                                    recipeConfig.set("source.template", templateName);
-                                }
+                                recipeConfig.set("source.type", "transform");
+                                recipeConfig.set("source.template", templateName);
                                 recipeConfig.set("unlock", unlock());
                                 recipeConfig.set("source.copy_nbt", copyNbt);
                                 recipeConfig.saveConfig();

@@ -3,12 +3,16 @@ package com.github.yufiriamazenta.craftorithm.listener;
 import com.github.yufiriamazenta.craftorithm.CraftorithmAPI;
 import com.github.yufiriamazenta.craftorithm.arcenciel.ArcencielDispatcher;
 import com.github.yufiriamazenta.craftorithm.config.PluginConfigs;
+import com.github.yufiriamazenta.craftorithm.item.ItemManager;
 import com.github.yufiriamazenta.craftorithm.recipe.RecipeManager;
 import com.github.yufiriamazenta.craftorithm.recipe.custom.AnvilRecipe;
+import com.github.yufiriamazenta.craftorithm.util.CollectionsUtil;
 import com.github.yufiriamazenta.craftorithm.util.ItemUtils;
 import crypticlib.listener.BukkitListener;
+import crypticlib.util.InventoryUtil;
 import crypticlib.util.ItemUtil;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -17,9 +21,11 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.PrepareAnvilEvent;
 import org.bukkit.inventory.AnvilInventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @BukkitListener
 public enum AnvilHandler implements Listener {
@@ -27,7 +33,7 @@ public enum AnvilHandler implements Listener {
     INSTANCE;
 
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onPrepareAnvil(PrepareAnvilEvent event) {
+    public void runConditions(PrepareAnvilEvent event) {
         if (!PluginConfigs.ENABLE_ANVIL_RECIPE.value())
             return;
         ItemStack base = event.getInventory().getItem(0);
@@ -47,7 +53,8 @@ public enum AnvilHandler implements Listener {
         //进行condition判断
         YamlConfiguration config = RecipeManager.INSTANCE.getRecipeConfig(anvilRecipe.key());
         if (config != null) {
-            Player player = (Player) event.getView().getPlayer();
+            Object inventoryView = InventoryUtil.getInventoryView(event);
+            Player player = (Player) InventoryUtil.getInventoryViewPlayer(inventoryView);
             String condition = config.getString("condition", "true");
             condition = "if " + condition;
             boolean conditionResult = (boolean) ArcencielDispatcher.INSTANCE.dispatchArcencielBlock(player, condition).obj();
@@ -61,17 +68,47 @@ public enum AnvilHandler implements Listener {
 
         //正常合成流程
         ItemStack result = anvilRecipe.result();
+        String resultId = ItemManager.INSTANCE.matchItemName(result, false);
+        if (resultId != null) {
+            ItemStack refreshItem = ItemManager.INSTANCE.matchItem(resultId, (Player) event.getViewers().get(0));
+            result.setItemMeta(refreshItem.getItemMeta());
+        }
         if (anvilRecipe.copyNbt()) {
             if (base.hasItemMeta())
                 result.setItemMeta(base.getItemMeta());
         }
+        if (anvilRecipe.copyEnchantments()) {
+            if (base.hasItemMeta()) {
+                Map<Enchantment, Integer> baseEnchantments = base.getItemMeta().getEnchants();
+                ItemMeta resultMeta = result.getItemMeta();
+                Map<Enchantment, Integer> resultEnchantments = new HashMap<>(resultMeta.getEnchants());
+                CollectionsUtil.putAllIf(resultEnchantments, baseEnchantments, (type, level) -> {
+                    if (resultEnchantments.containsKey(type)) {
+                        return level > resultEnchantments.get(type);
+                    } else {
+                        return true;
+                    }
+                });
+                resultMeta.getEnchants().forEach(
+                    (enchant, level) -> {
+                        resultMeta.removeEnchant(enchant);
+                    }
+                );
+                resultEnchantments.forEach((enchant, level) -> {
+                    resultMeta.addEnchant(enchant, level, true);
+                });
+                result.setItemMeta(resultMeta);
+            }
+        }
         event.getInventory().setRepairCost(anvilRecipe.costLevel());
+        //刷新物品
+
         event.setResult(result);
         event.getInventory().setItem(2, result);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onClickAnvil(InventoryClickEvent event) {
+    public void matchAnvilResult(InventoryClickEvent event) {
         if (!PluginConfigs.ENABLE_ANVIL_RECIPE.value())
             return;
 
@@ -111,7 +148,7 @@ public enum AnvilHandler implements Listener {
                 if (ItemUtil.isAir(cursor)) {
                     base.setAmount(baseNum - needBaseNum);
                     addition.setAmount(additionNum - needAdditionNum);
-                    event.getView().setCursor(result);
+                    event.setCursor(result);
                     player.setLevel(player.getLevel() - costLevel);
                 } else {
                     int resultCursor = cursor.getAmount() + result.getAmount();
@@ -119,7 +156,7 @@ public enum AnvilHandler implements Listener {
                         break;
                     base.setAmount(baseNum - needBaseNum);
                     addition.setAmount(additionNum - needAdditionNum);
-                    event.getView().getCursor().setAmount(resultCursor);
+                    event.getCursor().setAmount(resultCursor);
                     player.setLevel(player.getLevel() - costLevel);
                 }
                 craftResult = true;

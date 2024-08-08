@@ -7,13 +7,16 @@ import com.github.yufiriamazenta.craftorithm.recipe.RecipeType;
 import com.github.yufiriamazenta.craftorithm.recipe.custom.AnvilRecipe;
 import com.github.yufiriamazenta.craftorithm.recipe.custom.PotionMixRecipe;
 import crypticlib.CrypticLib;
+import crypticlib.chat.MsgSender;
 import crypticlib.chat.TextProcessor;
 import crypticlib.ui.display.Icon;
 import crypticlib.ui.menu.Menu;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.*;
 import org.jetbrains.annotations.NotNull;
@@ -104,6 +107,17 @@ public class RecipeDisplayMenu extends Menu {
         return inventory;
     }
 
+    @Override
+    public Icon onClick(int slot, InventoryClickEvent event) {
+        MsgSender.debug(event.getClick().name());
+        return super.onClick(slot, event);
+    }
+
+    @Override
+    public void onDrag(InventoryDragEvent event) {
+        event.setCancelled(true);
+    }
+
     public void setShapedRecipeMenu() {
         ShapedRecipe shapedRecipe = (ShapedRecipe) recipe;
         String[] shape = shapedRecipe.getShape();
@@ -152,19 +166,13 @@ public class RecipeDisplayMenu extends Menu {
 
     private void setSmithingRecipeMenu() {
         SmithingRecipe smithingRecipe = (SmithingRecipe) recipe;
-        if (CrypticLib.minecraftVersion() >= 12000) {
-            slotMap.put(1, new Icon(smithingRecipe.getBase().getItemStack()));
-            slotMap.put(2, new Icon(smithingRecipe.getAddition().getItemStack()));
-            slotMap.put(3, new Icon(smithingRecipe.getResult()));
-            if (recipe instanceof SmithingTransformRecipe) {
-                slotMap.put(0, new Icon(((SmithingTransformRecipe) recipe).getTemplate().getItemStack()));
-            } else if (recipe instanceof SmithingTrimRecipe){
-                slotMap.put(0, new Icon(((SmithingTrimRecipe) recipe).getTemplate().getItemStack()));
-            }
-        } else {
-            slotMap.put(0, new Icon(smithingRecipe.getBase().getItemStack()));
-            slotMap.put(1, new Icon(smithingRecipe.getAddition().getItemStack()));
-            slotMap.put(2, new Icon(smithingRecipe.getResult()));
+        slotMap.put(1, new Icon(smithingRecipe.getBase().getItemStack()));
+        slotMap.put(2, new Icon(smithingRecipe.getAddition().getItemStack()));
+        slotMap.put(3, new Icon(smithingRecipe.getResult()));
+        if (recipe instanceof SmithingTransformRecipe) {
+            slotMap.put(0, new Icon(((SmithingTransformRecipe) recipe).getTemplate().getItemStack()));
+        } else if (recipe instanceof SmithingTrimRecipe){
+            slotMap.put(0, new Icon(((SmithingTrimRecipe) recipe).getTemplate().getItemStack()));
         }
     }
 

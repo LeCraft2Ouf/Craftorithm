@@ -4,16 +4,19 @@ import com.github.yufiriamazenta.craftorithm.Craftorithm;
 import com.github.yufiriamazenta.craftorithm.config.Languages;
 import com.github.yufiriamazenta.craftorithm.config.PluginConfigs;
 import com.github.yufiriamazenta.craftorithm.exception.UnsupportedVersionException;
+import com.github.yufiriamazenta.craftorithm.item.ItemManager;
 import com.github.yufiriamazenta.craftorithm.recipe.custom.AnvilRecipe;
 import com.github.yufiriamazenta.craftorithm.recipe.custom.CustomRecipe;
 import com.github.yufiriamazenta.craftorithm.recipe.custom.PotionMixRecipe;
 import com.github.yufiriamazenta.craftorithm.recipe.registry.RecipeRegistry;
+import com.github.yufiriamazenta.craftorithm.recipe.registry.impl.SmithingRecipeRegistry;
 import com.github.yufiriamazenta.craftorithm.util.CollectionsUtil;
 import com.github.yufiriamazenta.craftorithm.util.LangUtil;
 import crypticlib.CrypticLib;
 import crypticlib.chat.MsgSender;
 import crypticlib.config.ConfigWrapper;
 import crypticlib.lang.entry.StringLangEntry;
+import crypticlib.platform.IPlatform;
 import crypticlib.util.FileUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Keyed;
@@ -34,6 +37,7 @@ public enum RecipeManager {
     public final File RECIPE_FILE_FOLDER = new File(Craftorithm.instance().getDataFolder().getPath(), "recipes");
     private final ConfigWrapper removedRecipesConfigWrapper = new ConfigWrapper(Craftorithm.instance(), "removed_recipes.yml");
     public final String PLUGIN_RECIPE_NAMESPACE = "craftorithm";
+    private final Map<NamespacedKey, RecipeRegistry> recipeRegistryMap = new ConcurrentHashMap<>();
     private final Map<RecipeType, Map<String, RecipeGroup>> pluginRecipeMap;
     private final Map<RecipeType, Consumer<Recipe>> recipeRegisterMap;
     private final Map<RecipeType, Consumer<List<NamespacedKey>>> recipeRemoverMap;
@@ -43,14 +47,7 @@ public enum RecipeManager {
     private final Map<NamespacedKey, PotionMixRecipe> potionMixRecipeMap;
     private final Map<NamespacedKey, AnvilRecipe> anvilRecipeMap;
     public static final List<RecipeType> UNLOCKABLE_RECIPE_TYPE =
-        Collections.unmodifiableList(Arrays.asList(
-            RecipeType.SHAPED,
-            RecipeType.SHAPELESS,
-            RecipeType.COOKING,
-            RecipeType.SMITHING,
-            RecipeType.STONE_CUTTING,
-            RecipeType.RANDOM_COOKING
-        ));
+        List.of(RecipeType.SHAPED, RecipeType.SHAPELESS, RecipeType.COOKING, RecipeType.SMITHING, RecipeType.STONE_CUTTING, RecipeType.RANDOM_COOKING);
     private boolean supportPotionMix;
 
     RecipeManager() {
@@ -68,18 +65,14 @@ public enum RecipeManager {
         recipeRemoverMap.put(RecipeType.SHAPED, this::removeRecipes);
         recipeRegisterMap.put(RecipeType.SHAPELESS, Bukkit::addRecipe);
         recipeRemoverMap.put(RecipeType.SHAPELESS, this::removeRecipes);
-        if (CrypticLib.minecraftVersion() >= 11400) {
-            recipeRegisterMap.put(RecipeType.COOKING, Bukkit::addRecipe);
-            recipeRemoverMap.put(RecipeType.COOKING, this::removeRecipes);
-            recipeRegisterMap.put(RecipeType.STONE_CUTTING, Bukkit::addRecipe);
-            recipeRemoverMap.put(RecipeType.STONE_CUTTING, this::removeRecipes);
-            recipeRegisterMap.put(RecipeType.SMITHING, Bukkit::addRecipe);
-            recipeRemoverMap.put(RecipeType.SMITHING, this::removeRecipes);
-        }
-        if (CrypticLib.minecraftVersion() >= 11700) {
-            recipeRegisterMap.put(RecipeType.RANDOM_COOKING, Bukkit::addRecipe);
-            recipeRemoverMap.put(RecipeType.RANDOM_COOKING, this::removeRecipes);
-        }
+        recipeRegisterMap.put(RecipeType.COOKING, Bukkit::addRecipe);
+        recipeRemoverMap.put(RecipeType.COOKING, this::removeRecipes);
+        recipeRegisterMap.put(RecipeType.STONE_CUTTING, Bukkit::addRecipe);
+        recipeRemoverMap.put(RecipeType.STONE_CUTTING, this::removeRecipes);
+        recipeRegisterMap.put(RecipeType.SMITHING, Bukkit::addRecipe);
+        recipeRemoverMap.put(RecipeType.SMITHING, this::removeRecipes);
+        recipeRegisterMap.put(RecipeType.RANDOM_COOKING, Bukkit::addRecipe);
+        recipeRemoverMap.put(RecipeType.RANDOM_COOKING, this::removeRecipes);
 
         if (PluginConfigs.ENABLE_ANVIL_RECIPE.value()) {
             recipeRegisterMap.put(RecipeType.ANVIL, recipe -> {
@@ -92,13 +85,8 @@ public enum RecipeManager {
             });
         }
 
-        try {
-            Class.forName("io.papermc.paper.potion.PotionMix");
+        if (!CrypticLib.platform().platform().equals(IPlatform.Platform.BUKKIT)) {
             supportPotionMix = true;
-        } catch (Exception e) {
-            supportPotionMix = false;
-        }
-        if (supportPotionMix) {
             recipeRegisterMap.put(RecipeType.POTION, recipe -> {
                 Bukkit.getPotionBrewer().addPotionMix(((PotionMixRecipe) recipe).potionMix());
                 potionMixRecipeMap.put(((PotionMixRecipe) recipe).key(), (PotionMixRecipe) recipe);
@@ -115,14 +103,19 @@ public enum RecipeManager {
         resetRecipes();
         loadRecipeGroups();
         loadRecipes();
-        reloadRemovedRecipes();
         loadServerRecipeCache();
+        reloadRemovedRecipes();
     }
 
     private void loadRecipes() {
         for (Map.Entry<RecipeType, Map<String, RecipeGroup>> pluginRecipeMapEntry : pluginRecipeMap.entrySet()) {
             Map<String, RecipeGroup> recipeGroupMap = pluginRecipeMapEntry.getValue();
             recipeGroupMap.forEach((recipeGroupName, recipeGroup) -> loadRecipeGroup(recipeGroup));
+        }
+        if (CrypticLib.isPaper()) {
+            if (CrypticLib.minecraftVersion() >= 12001) {
+                Bukkit.updateRecipes();
+            }
         }
     }
 
@@ -134,6 +127,7 @@ public enum RecipeManager {
             }
             for (RecipeRegistry recipeRegistry : RecipeFactory.newRecipeRegistry(config, recipeGroup.groupName())) {
                 recipeRegistry.register();
+                recipeRegistryMap.put(recipeRegistry.namespacedKey(), recipeRegistry);
                 if (UNLOCKABLE_RECIPE_TYPE.contains(recipeGroup.recipeType())) {
                     recipeUnlockMap.put(recipeRegistry.namespacedKey(), recipeGroup.unlock());
                 }
@@ -203,24 +197,16 @@ public enum RecipeManager {
         }
         if (anvilRecipeMap.containsKey(namespacedKey))
             return anvilRecipeMap.get(namespacedKey);
-        if (CrypticLib.minecraftVersion() >= 11600) {
-            return Bukkit.getRecipe(namespacedKey);
-        } else {
-            return serverRecipesCache.get(namespacedKey);
-        }
+        return Bukkit.getRecipe(namespacedKey);
     }
 
-    public NamespacedKey getRecipeKey(Recipe recipe) {
-        if (recipe == null)
-            return null;
-        if (recipe instanceof CustomRecipe) {
-            return ((CustomRecipe) recipe).key();
-        }
-        if (recipe instanceof Keyed) {
-            return ((Keyed) recipe).getKey();
-        }
-        else {
-            MsgSender.info("&e[WARN] Can not get key of recipe " + recipe);
+    public @Nullable NamespacedKey getRecipeKey(Recipe recipe) {
+        if (recipe instanceof CustomRecipe customRecipe) {
+            return customRecipe.key();
+        } else if (recipe instanceof Keyed keyed) {
+            return keyed.getKey();
+        } else {
+//            MsgSender.info("&e[WARN] Can not get key of recipe " + recipe);
             return null;
         }
     }
@@ -309,21 +295,9 @@ public enum RecipeManager {
 
         //在服务器中缓存的数据
         int removedRecipeNum = 0;
-        if (CrypticLib.minecraftVersion() >= 11500) {
-            for (NamespacedKey recipeKey : recipeKeys) {
-                if (Bukkit.removeRecipe(recipeKey))
-                    removedRecipeNum ++;
-            }
-        } else {
-            Iterator<Recipe> recipeIterator = Bukkit.recipeIterator();
-            while (recipeIterator.hasNext()) {
-                Recipe iteratorRecipe = recipeIterator.next();
-                NamespacedKey iteratorRecipeKey = getRecipeKey(iteratorRecipe);
-                if (recipeKeys.contains(iteratorRecipeKey)) {
-                    recipeIterator.remove();
-                    removedRecipeNum ++;
-                }
-            }
+        for (NamespacedKey recipeKey : recipeKeys) {
+            if (Bukkit.removeRecipe(recipeKey))
+                removedRecipeNum ++;
         }
         for (NamespacedKey recipeKey : recipeKeys) {
             serverRecipesCache.remove(recipeKey);
@@ -374,36 +348,49 @@ public enum RecipeManager {
 
     @Nullable
     public AnvilRecipe matchAnvilRecipe(ItemStack base, ItemStack addition) {
+        String baseId = ItemManager.INSTANCE.matchItemName(base, true);
+        baseId = baseId != null ? baseId : base.getType().getKey().toString();
+        String additionId = ItemManager.INSTANCE.matchItemName(addition, true);
+        additionId = additionId != null ? additionId : addition.getType().getKey().toString();
+
+        MsgSender.debug("base: " + baseId + ", addition: " + additionId);
         for (Map.Entry<NamespacedKey, AnvilRecipe> anvilRecipeEntry : anvilRecipeMap.entrySet()) {
             AnvilRecipe anvilRecipe = anvilRecipeEntry.getValue();
-            if (!anvilRecipe.base().isSimilar(base))
+            String recipeBaseId = ItemManager.INSTANCE.matchItemName(anvilRecipe.base(), true);
+            recipeBaseId = recipeBaseId != null ? recipeBaseId : anvilRecipe.base().getType().getKey().toString();
+            String recipeAdditionId = ItemManager.INSTANCE.matchItemName(anvilRecipe.addition(), true);
+            recipeAdditionId = recipeAdditionId != null ? recipeAdditionId : anvilRecipe.addition().getType().getKey().toString();
+            MsgSender.debug("recipe base: " + recipeBaseId + ", recipe addition: " + recipeAdditionId);
+            if (!Objects.equals(baseId, recipeBaseId))
                 continue;
+            MsgSender.debug("matched base id");
             if (base.getAmount() < anvilRecipe.base().getAmount())
                 continue;
-            if (!anvilRecipe.addition().isSimilar(addition))
+            MsgSender.debug("matched base amount");
+            if (!Objects.equals(additionId, recipeAdditionId))
                 continue;
+            MsgSender.debug("matched addition id");
             if (addition.getAmount() < anvilRecipe.addition().getAmount())
                 continue;
+            MsgSender.debug("matched addition amount");
             return anvilRecipe;
         }
         return null;
     }
 
     public RecipeType getRecipeType(Recipe recipe) {
-        if (recipe == null)
-            return RecipeType.UNKNOWN;
         if (recipe instanceof ShapedRecipe)
             return RecipeType.SHAPED;
         else if (recipe instanceof ShapelessRecipe)
             return RecipeType.SHAPELESS;
-        else if (recipe instanceof CookingRecipe)
+        else if (recipe instanceof CookingRecipe<?>)
             return RecipeType.COOKING;
         else if (recipe instanceof SmithingRecipe)
             return RecipeType.SMITHING;
-        else if (recipe instanceof StonecuttingRecipe)
-            return RecipeType.STONE_CUTTING;
         else if (recipe instanceof PotionMixRecipe)
             return RecipeType.POTION;
+        else if (recipe instanceof StonecuttingRecipe)
+            return RecipeType.STONE_CUTTING;
         else if (recipe instanceof AnvilRecipe)
             return RecipeType.ANVIL;
         else
@@ -411,24 +398,29 @@ public enum RecipeManager {
     }
 
     public StringLangEntry getRecipeTypeName(RecipeType recipeType) {
-        switch (recipeType) {
-            case SHAPED:
-                return Languages.RECIPE_TYPE_NAME_SHAPED;
-            case SHAPELESS:
-                return Languages.RECIPE_TYPE_NAME_SHAPELESS;
-            case COOKING:
-                return Languages.RECIPE_TYPE_NAME_COOKING;
-            case SMITHING:
-                return Languages.RECIPE_TYPE_NAME_SMITHING;
-            case STONE_CUTTING:
-                return Languages.RECIPE_TYPE_NAME_STONE_CUTTING;
-            case POTION:
-                return Languages.RECIPE_TYPE_NAME_POTION;
-            case ANVIL:
-                return Languages.RECIPE_TYPE_NAME_ANVIL;
-            default:
-                return null;
+        return switch (recipeType) {
+            case SHAPED -> Languages.RECIPE_TYPE_NAME_SHAPED;
+            case SHAPELESS -> Languages.RECIPE_TYPE_NAME_SHAPELESS;
+            case COOKING -> Languages.RECIPE_TYPE_NAME_COOKING;
+            case SMITHING -> Languages.RECIPE_TYPE_NAME_SMITHING;
+            case STONE_CUTTING -> Languages.RECIPE_TYPE_NAME_STONE_CUTTING;
+            case POTION -> Languages.RECIPE_TYPE_NAME_POTION;
+            case ANVIL -> Languages.RECIPE_TYPE_NAME_ANVIL;
+            default -> null;
+        };
+    }
+
+    public boolean getSmithingCopyEnchantment(Recipe recipe) {
+        if (!(recipe instanceof SmithingRecipe))
+            return false;
+        NamespacedKey namespacedKey = getRecipeKey(recipe);
+        if (namespacedKey == null)
+            return false;
+        RecipeRegistry recipeRegistry = recipeRegistryMap.get(namespacedKey);
+        if (!(recipeRegistry instanceof SmithingRecipeRegistry smithingRecipeRegistry)) {
+            return false;
         }
+        return smithingRecipeRegistry.copyEnchantments();
     }
 
     public void resetRecipes() {
@@ -494,18 +486,14 @@ public enum RecipeManager {
         Craftorithm.instance().saveResource("recipes/example_shapeless.yml", false);
         allFiles.add(new File(RECIPE_FILE_FOLDER, "example_shaped.yml"));
         allFiles.add(new File(RECIPE_FILE_FOLDER, "example_shapeless.yml"));
-        if (CrypticLib.minecraftVersion() >= 11400) {
-            Craftorithm.instance().saveResource("recipes/example_smithing.yml", false);
-            Craftorithm.instance().saveResource("recipes/example_stone_cutting.yml", false);
-            Craftorithm.instance().saveResource("recipes/example_cooking.yml", false);
-            allFiles.add(new File(RECIPE_FILE_FOLDER, "example_cooking.yml"));
-            allFiles.add(new File(RECIPE_FILE_FOLDER, "example_smithing.yml"));
-            allFiles.add(new File(RECIPE_FILE_FOLDER, "example_stone_cutting.yml"));
-        }
-        if (CrypticLib.minecraftVersion() >= 11700) {
-            Craftorithm.instance().saveResource("recipes/example_random_cooking.yml", false);
-            allFiles.add(new File(RECIPE_FILE_FOLDER, "example_random_cooking.yml"));
-        }
+        Craftorithm.instance().saveResource("recipes/example_smithing.yml", false);
+        Craftorithm.instance().saveResource("recipes/example_stone_cutting.yml", false);
+        Craftorithm.instance().saveResource("recipes/example_cooking.yml", false);
+        allFiles.add(new File(RECIPE_FILE_FOLDER, "example_cooking.yml"));
+        allFiles.add(new File(RECIPE_FILE_FOLDER, "example_smithing.yml"));
+        allFiles.add(new File(RECIPE_FILE_FOLDER, "example_stone_cutting.yml"));
+        Craftorithm.instance().saveResource("recipes/example_random_cooking.yml", false);
+        allFiles.add(new File(RECIPE_FILE_FOLDER, "example_random_cooking.yml"));
         if (supportPotionMix()) {
             Craftorithm.instance().saveResource("recipes/example_potion.yml", false);
             allFiles.add(new File(RECIPE_FILE_FOLDER, "example_potion.yml"));

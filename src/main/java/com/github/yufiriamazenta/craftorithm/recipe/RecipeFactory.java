@@ -6,7 +6,6 @@ import com.github.yufiriamazenta.craftorithm.exception.UnsupportedVersionExcepti
 import com.github.yufiriamazenta.craftorithm.item.ItemManager;
 import com.github.yufiriamazenta.craftorithm.recipe.registry.RecipeRegistry;
 import com.github.yufiriamazenta.craftorithm.recipe.registry.impl.*;
-import crypticlib.CrypticLib;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Tag;
@@ -14,6 +13,8 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.RecipeChoice;
+import org.bukkit.inventory.recipe.CookingBookCategory;
+import org.bukkit.inventory.recipe.CraftingBookCategory;
 
 import java.lang.reflect.Field;
 import java.util.*;
@@ -32,19 +33,14 @@ public class RecipeFactory {
         recipeRegistryProviderMap.put(RecipeType.SHAPELESS, RecipeFactory::newShapelessRecipe);
         multipleRecipeRegistryProviderMap.put(RecipeType.SHAPED, RecipeFactory::newMultipleShapedRecipe);
         multipleRecipeRegistryProviderMap.put(RecipeType.SHAPELESS, RecipeFactory::newMultipleShapelessRecipe);
-        if (CrypticLib.minecraftVersion() >= 11400) {
-            recipeRegistryProviderMap.put(RecipeType.COOKING, RecipeFactory::newCookingRecipe);
-            multipleRecipeRegistryProviderMap.put(RecipeType.COOKING, RecipeFactory::newMultipleCookingRecipe);
-            recipeRegistryProviderMap.put(RecipeType.STONE_CUTTING, RecipeFactory::newStoneCuttingRecipe);
-            multipleRecipeRegistryProviderMap.put(RecipeType.STONE_CUTTING, RecipeFactory::newMultipleStoneCuttingRecipe);
-            recipeRegistryProviderMap.put(RecipeType.SMITHING, RecipeFactory::newSmithingRecipe);
-            multipleRecipeRegistryProviderMap.put(RecipeType.SMITHING, RecipeFactory::newMultipleSmithingRecipe);
-        }
-
-        if (CrypticLib.minecraftVersion() >= 11700) {
-            recipeRegistryProviderMap.put(RecipeType.RANDOM_COOKING, RecipeFactory::newRandomCookingRecipe);
-            multipleRecipeRegistryProviderMap.put(RecipeType.RANDOM_COOKING, RecipeFactory::newMultipleRandomCookingRecipe);
-        }
+        recipeRegistryProviderMap.put(RecipeType.COOKING, RecipeFactory::newCookingRecipe);
+        multipleRecipeRegistryProviderMap.put(RecipeType.COOKING, RecipeFactory::newMultipleCookingRecipe);
+        recipeRegistryProviderMap.put(RecipeType.STONE_CUTTING, RecipeFactory::newStoneCuttingRecipe);
+        multipleRecipeRegistryProviderMap.put(RecipeType.STONE_CUTTING, RecipeFactory::newMultipleStoneCuttingRecipe);
+        recipeRegistryProviderMap.put(RecipeType.SMITHING, RecipeFactory::newSmithingRecipe);
+        multipleRecipeRegistryProviderMap.put(RecipeType.SMITHING, RecipeFactory::newMultipleSmithingRecipe);
+        recipeRegistryProviderMap.put(RecipeType.RANDOM_COOKING, RecipeFactory::newRandomCookingRecipe);
+        multipleRecipeRegistryProviderMap.put(RecipeType.RANDOM_COOKING, RecipeFactory::newMultipleRandomCookingRecipe);
 
         if (RecipeManager.INSTANCE.supportPotionMix()) {
             recipeRegistryProviderMap.put(RecipeType.POTION, RecipeFactory::newPotionMixRecipe);
@@ -79,12 +75,20 @@ public class RecipeFactory {
         NamespacedKey namespacedKey = new NamespacedKey(Craftorithm.instance(), key);
 
         List<String> shapeStrList = config.getStringList("shape");
+        CraftingBookCategory category = null;
+        if (config.contains("category")) {
+            String categoryStr = config.getString("category").toUpperCase();
+            category = CraftingBookCategory.valueOf(categoryStr);
+        }
         if (shapeStrList.size() > 3) {
             shapeStrList = shapeStrList.subList(0, 3);
         }
         String[] shape = new String[shapeStrList.size()];
         shape = shapeStrList.toArray(shape);
-        RecipeRegistry recipeRegistry = new ShapedRecipeRegistry(key, namespacedKey, result).setShape(shape).setRecipeChoiceMap(recipeChoiceMap);
+        RecipeRegistry recipeRegistry = new ShapedRecipeRegistry(key, namespacedKey, result)
+            .setShape(shape)
+            .setRecipeChoiceMap(recipeChoiceMap)
+            .setCraftingBookCategory(category);
         return Collections.singletonList(recipeRegistry);
     }
 
@@ -92,6 +96,11 @@ public class RecipeFactory {
         Map<Character, RecipeChoice> recipeChoiceMap = getShapedRecipeChoiceMap(config.getConfigurationSection("source"));
         ItemStack result = getResultItem(config);
         List<?> shapeList = config.getList("shape", new ArrayList<>());
+        CraftingBookCategory category = null;
+        if (config.contains("category")) {
+            String categoryStr = config.getString("category").toUpperCase();
+            category = CraftingBookCategory.valueOf(categoryStr);
+        }
         List<RecipeRegistry> recipeRegistries = new ArrayList<>();
         for (int i = 0; i < shapeList.size(); i++) {
             String fullKey = key + "." + i;
@@ -102,7 +111,11 @@ public class RecipeFactory {
             }
             String[] shape = new String[shapeStrList.size()];
             shape = shapeStrList.toArray(shape);
-            recipeRegistries.add(new ShapedRecipeRegistry(key, namespacedKey, result).setShape(shape).setRecipeChoiceMap(recipeChoiceMap));
+            recipeRegistries.add(new ShapedRecipeRegistry(key, namespacedKey, result)
+                .setShape(shape)
+                .setRecipeChoiceMap(recipeChoiceMap)
+                .setCraftingBookCategory(category)
+            );
         }
         return recipeRegistries;
     }
@@ -115,7 +128,14 @@ public class RecipeFactory {
         for (String itemStr : itemStrList) {
             recipeChoiceList.add(getRecipeChoice(itemStr));
         }
-        RecipeRegistry recipeRegistry = new ShapelessRecipeRegistry(key, namespacedKey, result).setChoiceList(recipeChoiceList);
+        CraftingBookCategory category = null;
+        if (config.contains("category")) {
+            String categoryStr = config.getString("category").toUpperCase();
+            category = CraftingBookCategory.valueOf(categoryStr);
+        }
+        RecipeRegistry recipeRegistry = new ShapelessRecipeRegistry(key, namespacedKey, result)
+            .setChoiceList(recipeChoiceList)
+            .setCraftingBookCategory(category);
         return Collections.singletonList(recipeRegistry);
     }
 
@@ -123,6 +143,11 @@ public class RecipeFactory {
         ItemStack result = getResultItem(config);
         List<?> itemsList = config.getList("source", new ArrayList<>());
         List<RecipeRegistry> recipeRegistries = new ArrayList<>();
+        CraftingBookCategory category = null;
+        if (config.contains("category")) {
+            String categoryStr = config.getString("category").toUpperCase();
+            category = CraftingBookCategory.valueOf(categoryStr);
+        }
 
         for (int i = 0; i < itemsList.size(); i++) {
             String fullKey = key + "." + i;
@@ -132,7 +157,10 @@ public class RecipeFactory {
             for (String itemStr : itemStrList) {
                 choiceList.add(getRecipeChoice(itemStr));
             }
-            recipeRegistries.add(new ShapelessRecipeRegistry(key, namespacedKey, result).setChoiceList(choiceList));
+            recipeRegistries.add(new ShapelessRecipeRegistry(key, namespacedKey, result)
+                .setChoiceList(choiceList)
+                .setCraftingBookCategory(category)
+            );
         }
         return recipeRegistries;
     }
@@ -145,7 +173,18 @@ public class RecipeFactory {
         RecipeChoice source = getRecipeChoice(choiceStr);
         float exp = (float) config.getDouble("exp", 0);
         int time = config.getInt("time", 200);
-        RecipeRegistry recipeRegistry = new CookingRecipeRegistry(key, namespacedKey, result).setCookingBlock(cookingBlock).setSource(source).setExp(exp).setTime(time);
+
+        CookingBookCategory category = null;
+        if (config.contains("category")) {
+            String categoryStr = config.getString("category").toUpperCase();
+            category = CookingBookCategory.valueOf(categoryStr);
+        }
+        RecipeRegistry recipeRegistry = new CookingRecipeRegistry(key, namespacedKey, result)
+            .setCookingBlock(cookingBlock)
+            .setSource(source)
+            .setExp(exp)
+            .setTime(time)
+            .setCookingBookCategory(category);
         return Collections.singletonList(recipeRegistry);
     }
 
@@ -155,6 +194,11 @@ public class RecipeFactory {
         int globalTime = config.getInt("time", 200);
         List<RecipeRegistry> recipeRegistries = new ArrayList<>();
 
+        CookingBookCategory category = null;
+        if (config.contains("category")) {
+            String categoryStr = config.getString("category").toUpperCase();
+            category = CookingBookCategory.valueOf(categoryStr);
+        }
         List<Map<?, ?>> sourceList = config.getMapList("source");
         for (int i = 0; i < sourceList.size(); i++) {
             Map<?, ?> map = sourceList.get(i);
@@ -164,7 +208,13 @@ public class RecipeFactory {
             String cookingBlock = (String) map.get("block");
             float exp = map.containsKey("exp") ? Float.parseFloat(String.valueOf(map.get("exp"))) : globalExp;
             int time = map.containsKey("time") ? (Integer) map.get("time") : globalTime;
-            recipeRegistries.add(new CookingRecipeRegistry(key, namespacedKey, result).setCookingBlock(cookingBlock).setSource(source).setExp(exp).setTime(time));
+            recipeRegistries.add(new CookingRecipeRegistry(key, namespacedKey, result)
+                .setCookingBlock(cookingBlock)
+                .setSource(source)
+                .setExp(exp)
+                .setTime(time)
+                .setCookingBookCategory(category)
+            );
         }
         return recipeRegistries;
     }
@@ -207,16 +257,12 @@ public class RecipeFactory {
         ItemStack result = getResultItem(config);
         RecipeChoice base = getRecipeChoice(config.getString("source.base", ""));
         RecipeChoice addition = getRecipeChoice(config.getString("source.addition", ""));
-        boolean copyNbt = config.getBoolean("source.copy_nbt", true);
+        boolean copyNbt = config.getBoolean("source.copy_nbt", false);
+        boolean copyEnchantments = config.getBoolean("source.copy_enchantments", true);
         RecipeRegistry recipeRegistry;
-        if (CrypticLib.minecraftVersion() >= 12000) {
-            RecipeChoice template = getRecipeChoice(config.getString("source.template", ""));
-            XSmithingRecipeRegistry.SmithingType type = XSmithingRecipeRegistry.SmithingType.valueOf(config.getString("source.type", "default").toUpperCase());
-            recipeRegistry = new XSmithingRecipeRegistry(key, namespacedKey, result).setSmithingType(type).setTemplate(template).setBase(base).setAddition(addition).setCopyNbt(copyNbt);
-        } else {
-            recipeRegistry = new SmithingRecipeRegistry(key, namespacedKey, result).setBase(base).setAddition(addition).setCopyNbt(copyNbt);
-        }
-
+        RecipeChoice template = getRecipeChoice(config.getString("source.template", ""));
+        SmithingRecipeRegistry.SmithingType type = SmithingRecipeRegistry.SmithingType.valueOf(config.getString("source.type", "default").toUpperCase());
+        recipeRegistry = new SmithingRecipeRegistry(key, namespacedKey, result).setSmithingType(type).setTemplate(template).setBase(base).setAddition(addition).setCopyNbt(copyNbt).setCopyEnchantments(copyEnchantments);
         return Collections.singletonList(recipeRegistry);
     }
 
@@ -230,18 +276,15 @@ public class RecipeFactory {
             NamespacedKey namespacedKey = new NamespacedKey(Craftorithm.instance(), fullKey);
             RecipeChoice base = getRecipeChoice((String) map.get("base"));
             RecipeChoice addition = getRecipeChoice((String) map.get("addition"));
-            boolean copyNbt = map.containsKey("copy_nbt") ? (Boolean) map.get("copy_nbt") : true;
+            boolean copyNbt = map.containsKey("copy_nbt") ? (Boolean) map.get("copy_nbt") : false;
+            boolean copyEnchantments = map.containsKey("copy_enchantments") ? (Boolean) map.get("copy_enchantments") : true;
             String typeStr = (String) map.get("type");
             if (typeStr == null) {
                 typeStr = "DEFAULT";
             }
-            if (CrypticLib.minecraftVersion() >= 12000) {
-                RecipeChoice template = getRecipeChoice((String) map.get("template"));
-                XSmithingRecipeRegistry.SmithingType type = XSmithingRecipeRegistry.SmithingType.valueOf(typeStr.toUpperCase());
-                recipeRegistries.add(new XSmithingRecipeRegistry(key, namespacedKey, result).setSmithingType(type).setTemplate(template).setBase(base).setAddition(addition).setCopyNbt(copyNbt));
-            } else {
-                recipeRegistries.add(new SmithingRecipeRegistry(key, namespacedKey, result).setBase(base).setAddition(addition).setCopyNbt(copyNbt));
-            }
+            RecipeChoice template = getRecipeChoice((String) map.get("template"));
+            SmithingRecipeRegistry.SmithingType type = SmithingRecipeRegistry.SmithingType.valueOf(typeStr.toUpperCase());
+            recipeRegistries.add(new SmithingRecipeRegistry(key, namespacedKey, result).setSmithingType(type).setTemplate(template).setBase(base).setAddition(addition).setCopyNbt(copyNbt).setCopyEnchantments(copyEnchantments));
         }
         return recipeRegistries;
     }
@@ -324,8 +367,14 @@ public class RecipeFactory {
         ItemStack base = ItemManager.INSTANCE.matchItem(config.getString("source.base", ""));
         ItemStack addition = ItemManager.INSTANCE.matchItem(config.getString("source.addition", ""));
         int costLevel = config.getInt("source.cost_level", 0);
-        boolean copyNbt = config.getBoolean("source.copy_nbt", true);
-        RecipeRegistry recipeRegistry = new AnvilRecipeRegistry(key, namespacedKey, result).setBase(base).setAddition(addition).setCopyNbt(copyNbt).setCostLevel(costLevel);
+        boolean copyNbt = config.getBoolean("source.copy_nbt", false);
+        boolean copyEnchantments = config.getBoolean("source.copy_enchantments", true);
+        RecipeRegistry recipeRegistry = new AnvilRecipeRegistry(key, namespacedKey, result)
+            .setBase(base)
+            .setAddition(addition)
+            .setCopyNbt(copyNbt)
+            .setCopyEnchantments(copyEnchantments)
+            .setCostLevel(costLevel);
         return Collections.singletonList(recipeRegistry);
     }
 
@@ -340,8 +389,15 @@ public class RecipeFactory {
             ItemStack base = ItemManager.INSTANCE.matchItem((String) map.get("base"));
             ItemStack addition = ItemManager.INSTANCE.matchItem((String) map.get("addition"));
             int costLevel = map.containsKey("cost_level") ? (Integer) map.get("cost_level") : 0;
-            boolean copyNbt = map.containsKey("copy_nbt") ? (Boolean) map.get("copy_nbt") : true;
-            recipeRegistries.add(new AnvilRecipeRegistry(key, namespacedKey, result).setBase(base).setAddition(addition).setCopyNbt(copyNbt).setCostLevel(costLevel));
+            boolean copyNbt = map.containsKey("copy_nbt") ? (Boolean) map.get("copy_nbt") : false;
+            boolean copyEnchantments = map.containsKey("copy_enchantments") ? (Boolean) map.get("copy_enchantments") : true;
+            recipeRegistries.add(new AnvilRecipeRegistry(key, namespacedKey, result)
+                .setBase(base)
+                .setAddition(addition)
+                .setCopyNbt(copyNbt)
+                .setCopyEnchantments(copyEnchantments)
+                .setCostLevel(costLevel)
+            );
         }
         return recipeRegistries;
     }

@@ -2,6 +2,7 @@ package com.github.yufiriamazenta.craftorithm.listener;
 
 import com.github.yufiriamazenta.craftorithm.item.ItemManager;
 import crypticlib.listener.BukkitListener;
+import crypticlib.util.InventoryUtil;
 import crypticlib.util.ItemUtil;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -14,16 +15,15 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 @BukkitListener
-public class FurnaceBurnHandler implements Listener {
+public class CustomFuelHandler implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onClickFurnace(InventoryClickEvent event) {
+    public void putFuelOnClick(InventoryClickEvent event) {
         if (event.isCancelled())
             return;
-        Inventory topInventory = event.getView().getTopInventory();
-        if (!(topInventory instanceof FurnaceInventory))
+        Inventory topInventory = InventoryUtil.getTopInventory(event);
+        if (!(topInventory instanceof FurnaceInventory furnaceInventory))
             return;
-        FurnaceInventory furnaceInventory = (FurnaceInventory) topInventory;
         Inventory clickInv = event.getClickedInventory();
         ItemStack current = event.getCurrentItem();
         int slot = event.getSlot();
@@ -48,9 +48,9 @@ public class FurnaceBurnHandler implements Listener {
                     current.setAmount(current.getAmount() + Math.min(cursor.getAmount(), canPlaceAmount));
                     cursor.setAmount(cursor.getAmount() - canPlaceAmount);
                     event.setCurrentItem(current);
-                    event.getView().setCursor(cursor);
+                    event.setCursor(cursor);
                 } else {
-                    event.getView().setCursor(current);
+                    event.setCursor(current);
                     event.setCurrentItem(cursor);
                 }
                 ((Player) event.getWhoClicked()).updateInventory();
@@ -83,7 +83,7 @@ public class FurnaceBurnHandler implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onFurnaceBurn(FurnaceBurnEvent event) {
+    public void setFuelBurnTime(FurnaceBurnEvent event) {
         if (event.isCancelled())
             return;
         ItemStack fuel = event.getFuel();
